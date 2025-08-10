@@ -9,6 +9,7 @@ the original Fortran code is ported.
 from __future__ import annotations
 
 from typing import Any, Dict, Tuple
+from collections import deque
 
 try:  # NumPy optional for stubs
     import numpy as np
@@ -51,7 +52,7 @@ def dir_reclass_rwatershed(flowdir: np.ndarray) -> np.ndarray:
 
 
 def basin_acum(flowdir: np.ndarray, mask: np.ndarray) -> np.ndarray:
-    """Compute a simple upstream cell accumulation.
+    """Compute upstream cell accumulation following D8 directions.
 
     Parameters
     ----------
@@ -64,31 +65,44 @@ def basin_acum(flowdir: np.ndarray, mask: np.ndarray) -> np.ndarray:
     -------
     ndarray
         Accumulated upstream cell counts.  Cells outside the mask return
-        zero.  The algorithm is a naive recursive computation and is not
-        optimised for large grids.
+        zero.  Cells involved in direction loops retain zero.
     """
 
     ny, nx = flowdir.shape
     acc = np.zeros_like(flowdir, dtype=float)
-
-    def _acc(r: int, c: int) -> float:
-        if not mask[r, c]:
-            return 0.0
-        if acc[r, c] > 0:
-            return acc[r, c]
-        total = 1.0
-        for dr, dc in _D8.values():
-            rr, cc = r - dr, c - dc
-            if 0 <= rr < ny and 0 <= cc < nx and mask[rr, cc]:
-                off = _D8.get(flowdir[rr, cc])
-                if off and rr + off[0] == r and cc + off[1] == c:
-                    total += _acc(rr, cc)
-        acc[r, c] = total
-        return total
+    receivers = np.full((ny, nx, 2), -1, dtype=int)
+    indegree = np.zeros((ny, nx), dtype=int)
 
     for r in range(ny):
         for c in range(nx):
-            _acc(r, c)
+            if not mask[r, c]:
+                continue
+            off = _D8.get(int(flowdir[r, c]))
+            if not off:
+                continue
+            rr, cc = r + off[0], c + off[1]
+            if 0 <= rr < ny and 0 <= cc < nx and mask[rr, cc]:
+                receivers[r, c] = (rr, cc)
+                indegree[rr, cc] += 1
+
+    q: deque[Tuple[int, int]] = deque()
+    for r in range(ny):
+        for c in range(nx):
+            if mask[r, c] and indegree[r, c] == 0:
+                acc[r, c] = 1.0
+                q.append((r, c))
+
+    while q:
+        r, c = q.popleft()
+        rr, cc = receivers[r, c]
+        if rr == -1:
+            continue
+        acc[rr, cc] += acc[r, c]
+        indegree[rr, cc] -= 1
+        if indegree[rr, cc] == 0:
+            if acc[rr, cc] == 0:
+                acc[rr, cc] = 1.0
+            q.append((rr, cc))
 
     return acc
 
