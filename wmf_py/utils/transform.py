@@ -36,7 +36,10 @@ def Transform_Basin2Map(
     if idx_basin_to_map is None:
         raise NotImplementedError("idx_basin_to_map must be provided")
 
-    out = np.full(map_shape, fill, dtype=values_basin.dtype)
-    out_flat = out.ravel()
-    out_flat[idx_basin_to_map] = values_basin
-    return out
+    vals = np.asarray(values_basin).ravel(order="C")
+    if vals.size != idx_basin_to_map.size:
+        raise ValueError("size of values and indices must match")
+
+    out = np.full(np.prod(map_shape), fill, dtype=vals.dtype)
+    out[idx_basin_to_map] = vals
+    return out.reshape(map_shape)

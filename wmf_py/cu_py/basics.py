@@ -13,42 +13,105 @@ from collections import deque
 
 try:  # NumPy optional for stubs
     import numpy as np
-except ModuleNotFoundError:  # pragma: no cover
+except ModuleNotFoundError:  # pragma: no cover - executed only in very
     np = Any  # type: ignore
 
-# Mapping of D8 codes to row/column offsets following a common convention
-_D8 = {
-    1: (0, 1),  # East
-    2: (-1, 1),  # North East
-    3: (-1, 0),  # North
-    4: (-1, -1),  # North West
-    5: (0, -1),  # West
-    6: (1, -1),  # South West
-    7: (1, 0),  # South
-    8: (1, 1),  # South East
+# ---------------------------------------------------------------------------
+# D8 definitions
+# ---------------------------------------------------------------------------
+#
+# Internally we follow a clockwise enumeration starting from East::
+#
+#     0 -> East      (0, 1)
+#     1 -> SouthEast (1, 1)
+#     2 -> South     (1, 0)
+#     3 -> SouthWest (1, -1)
+#     4 -> West      (0, -1)
+#     5 -> NorthWest (-1, -1)
+#     6 -> North     (-1, 0)
+#     7 -> NorthEast (-1, 1)
+#
+# This ordering allows simple opposite direction computation via
+# ``(code + 4) % 8``.  The mapping below is used by all algorithms in this
+# module and by the reclassification utilities.
+_D8: Dict[int, Tuple[int, int]] = {
+    0: (0, 1),
+    1: (1, 1),
+    2: (1, 0),
+    3: (1, -1),
+    4: (0, -1),
+    5: (-1, -1),
+    6: (-1, 0),
+    7: (-1, 1),
+}
+
+# Reclassification tables from common external conventions to the internal
+# numbering.  Keys are external codes; values are internal codes.
+_RECLASS_OPENTOPO = {
+    1: 0,
+    2: 1,
+    3: 2,
+    4: 3,
+    5: 4,
+    6: 5,
+    7: 6,
+    8: 7,
+}
+
+_RECLASS_RWATERSHED = {
+    1: 0,
+    2: 7,
+    3: 6,
+    4: 5,
+    5: 4,
+    6: 3,
+    7: 2,
+    8: 1,
 }
 
 
-def dir_reclass_opentopo(flowdir: np.ndarray) -> np.ndarray:
-    """Reclassify OpenTopo flow directions.
+def _reclass(flowdir: np.ndarray, table: Dict[int, int]) -> np.ndarray:
+    """Internal helper to reclassify external D8 codes.
 
-    Currently the function returns the input unchanged because the
-    internal convention follows the D8 codes used by OpenTopo.  A full
-    mapping table may be added in the future.
+    Parameters
+    ----------
+    flowdir : ndarray
+        Array with external flow direction codes.
+    table : dict
+        Mapping from external codes to internal codes ``0..7``.
+
+    Returns
+    -------
+    ndarray
+        Array with the internal codes.  A :class:`ValueError` is raised if
+        an unknown code is encountered.
     """
 
-    return flowdir.copy()
+    if flowdir.size == 0:
+        return flowdir.astype(int)
+
+    vals = np.unique(flowdir)
+    valid = set(table.keys())
+    unknown = set(int(v) for v in vals) - valid
+    if unknown:
+        raise ValueError(f"unknown D8 codes: {sorted(unknown)}")
+
+    out = np.empty_like(flowdir, dtype=int)
+    for k, v in table.items():
+        out[flowdir == k] = v
+    return out
+
+
+def dir_reclass_opentopo(flowdir: np.ndarray) -> np.ndarray:
+    """Reclassify OpenTopo flow directions to the internal convention."""
+
+    return _reclass(flowdir, _RECLASS_OPENTOPO)
 
 
 def dir_reclass_rwatershed(flowdir: np.ndarray) -> np.ndarray:
-    """Reclassify ``r.watershed`` flow directions.
+    """Reclassify ``r.watershed`` flow directions to the internal system."""
 
-    The present MVP assumes the incoming array already uses the internal
-    D8 numbering and simply returns a copy.  A detailed reclassification
-    may be implemented later.  See :func:`dir_reclass_opentopo`.
-    """
-
-    return flowdir.copy()
+    return _reclass(flowdir, _RECLASS_RWATERSHED)
 
 
 def basin_acum(flowdir: np.ndarray, mask: np.ndarray) -> np.ndarray:
@@ -57,7 +120,8 @@ def basin_acum(flowdir: np.ndarray, mask: np.ndarray) -> np.ndarray:
     Parameters
     ----------
     flowdir : ndarray
-        Array of D8 flow directions encoded with integers 1--8.
+        Array of D8 flow directions encoded with integers ``0``--``7``
+        following the internal clockwise convention.
     mask : ndarray of bool
         Basin mask where ``True`` denotes active cells.
 
@@ -139,40 +203,81 @@ def basin_cut(
     flowdir: np.ndarray,
     mask: np.ndarray,
 ) -> Dict[str, np.ndarray]:
-    """Apply a basin mask to DEM and flow directions.
+    """Delineate the upstream basin draining to ``outlet_rc``.
 
-    This is a minimal implementation that simply clips the provided
-    arrays with the boolean ``mask``.  It does **not** perform an actual
-    delineation following ``flowdir``; that behaviour is left for a future
-    version.
+    A breadth-first search is performed exploring neighbours whose flow
+    direction points to the currently processed cell.  Only cells within
+    ``mask`` are considered.  The returned dictionary contains the
+    original ``dem`` and ``flowdir`` arrays masked to the delineated
+    basin.
     """
 
-    dem_cut = np.where(mask, dem, np.nan)
-    flowdir_cut = np.where(mask, flowdir, 0)
-    return {"dem": dem_cut, "flowdir": flowdir_cut, "mask": mask}
+    ny, nx = flowdir.shape
+    mask_basin = np.zeros_like(mask, dtype=bool)
+
+    r0, c0 = outlet_rc
+    if not (0 <= r0 < ny and 0 <= c0 < nx):
+        raise ValueError("outlet outside grid")
+    if not mask[r0, c0]:
+        raise ValueError("outlet not in mask")
+
+    q: deque[Tuple[int, int]] = deque([(r0, c0)])
+    mask_basin[r0, c0] = True
+
+    while q:
+        r, c = q.popleft()
+        for d, (dr, dc) in _D8.items():
+            rr, cc = r + dr, c + dc
+            if not (0 <= rr < ny and 0 <= cc < nx):
+                continue
+            if not mask[rr, cc] or mask_basin[rr, cc]:
+                continue
+            # neighbour flows to current cell if its direction is opposite
+            if int(flowdir[rr, cc]) == (d + 4) % 8:
+                mask_basin[rr, cc] = True
+                q.append((rr, cc))
+
+    dem_cut = dem * mask_basin
+    flowdir_cut = flowdir * mask_basin
+    return {"dem": dem_cut, "flowdir": flowdir_cut, "mask": mask_basin}
 
 
 def basin_2map(
     values: np.ndarray,
-    nrows: int,
-    ncols: int,
+    idx_basin_to_map: np.ndarray,
+    map_shape: Tuple[int, int],
     nodata: float,
-    xll: float,
-    yll: float,
-    dx: float,
-    dy: float,
 ) -> np.ndarray:
-    """Map basin values to a regular grid.
+    """Map basin values to a raster using linear indices.
 
-    The current placeholder simply reshapes ``values`` to ``(nrows, ncols)``.
-    The coordinate arguments are accepted for API compatibility and will
-    be used once a proper basin↔map conversion is implemented.
+    Parameters
+    ----------
+    values : ndarray
+        Values defined on basin cells.  They are flattened in C-order.
+    idx_basin_to_map : ndarray
+        Linear indices locating each basin cell within the target map.
+    map_shape : tuple
+        ``(nrows, ncols)`` of the target map.
+    nodata : float
+        Fill value for cells outside the basin.
     """
 
-    return values.reshape((nrows, ncols))
+    vals = np.asarray(values).ravel(order="C")
+    if vals.size != idx_basin_to_map.size:
+        raise ValueError("size of values and indices must match")
+
+    out = np.full(np.prod(map_shape), nodata, dtype=vals.dtype)
+    out[idx_basin_to_map] = vals
+    return out.reshape(map_shape)
 
 
-def basin_map2basin(values_map: np.ndarray, mask_basin: np.ndarray) -> np.ndarray:
-    """Extract basin values from a map using a boolean mask."""
+def basin_map2basin(
+    values_map: np.ndarray, idx_basin_to_map: np.ndarray, basin_shape: Tuple[int, int]
+) -> np.ndarray:
+    """Extract basin values from a map using linear indices."""
 
-    return values_map[mask_basin.astype(bool)]
+    flat = np.asarray(values_map).ravel(order="C")
+    if np.max(idx_basin_to_map) >= flat.size or np.min(idx_basin_to_map) < 0:
+        raise ValueError("indices out of range")
+    vals = flat[idx_basin_to_map]
+    return vals.reshape(basin_shape)
