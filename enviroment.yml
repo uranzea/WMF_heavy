@@ -1,0 +1,38 @@
+name: wmf_heavy
+version: 1.0.0
+description: |
+  Entorno Conda para el proyecto WMF Heavy, optimizado para análisis geoespacial y calibración de modelos hidrológicos.
+  Incluye herramientas para manejo de datos geoespaciales, visualización y algoritmos de optimización.
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10  # Versión recomendada, compatible con la mayoría de paquetes actuales
+  - numpy>=1.23,<2
+  - pandas>=1.5,<2
+  - scipy>=1.11,<2
+  - matplotlib>=3.7,<4
+  - pyproj>=3.5,<4          # Para gestión de CRS (EPSG codes)
+  - rasterio>=1.3,<2        # Para manejo raster (si se usa)
+  - gdal>=3.8,<4            # Para lectura/escritura geoespacial
+  - cartopy>=0.21,<1        # Visualización geográfica avanzada
+  - netcdf4>=1.6,<2         # Manipulación de archivos NetCDF
+  - deap>=1.3,<2            # Algoritmos genéticos para calibración
+  - multiprocessing         # Integrado en Python estándar, pero reafirmado
+  - pip                     # Para poder instalar paquetes PyPI adicionales si se requiere
+
+  # Opcional (no imprescindible, pero recomendado si se usa parte geoespacial avanzada)
+  - shapely>=2.0,<3
+  - pyshp>=2.3,<3
+  - cartopy                 # puede ir de canal con gdal y proj
+
+  # Si usas jupyter
+  - jupyterlab
+
+  # Si quieres paquetes extra para análisis y gráficos ricos
+  - seaborn
+
+# Si tienes dependencias pip requeridas no instalables con conda, listarlas aquí 
+# (por ejemplo alguna dependencia directa de PySheds o módulos no dispo en conda)
+# pip:
+#   - pysheds
