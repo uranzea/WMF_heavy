@@ -32,8 +32,16 @@ import matplotlib.ticker as mticker
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 # ======= Imports de módulos locales =======
-from cu import *       # Módulo de funciones de cuencas (Fortran/C o Python)
-from models import *   # Módulo de simulación hidrológica
+USE_PY = True
+
+if USE_PY:
+    from wmf_py.cu_py.basics import *  # noqa: F403
+    from wmf_py.cu_py.streams import *  # noqa: F403
+    from wmf_py.cu_py.metrics import *  # noqa: F403
+    from wmf_py.models_py.core import *  # noqa: F403
+else:
+    from cu import *  # Módulo de funciones de cuencas (Fortran/C o Python)  # noqa: F401,F403
+    from models import *  # Módulo de simulación hidrológica  # noqa: F401,F403
 
 # ======= Dependencias opcionales =======
 
