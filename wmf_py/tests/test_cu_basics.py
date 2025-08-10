@@ -1,11 +1,15 @@
-import pytest
+import numpy as np
 
-np = pytest.importorskip("numpy")
-
-from wmf_py.cu_py import basics
+from wmf_py.cu_py.basics import basin_find, basin_map2basin
 
 
-def test_dir_reclass_identity():
-    arr = np.arange(4).reshape(2, 2)
-    out = basics.dir_reclass_opentopo(arr)
-    assert np.array_equal(out, arr)
+def test_basin_find_bounds() -> None:
+    rc = basin_find(x=60, y=60, xll=0, yll=0, dx=30, dy=30, ncols=3, nrows=3)
+    assert rc == (2, 2)
+
+
+def test_basin_map2basin_mask() -> None:
+    v = np.arange(9).reshape(3, 3)
+    m = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]], dtype=bool)
+    out = basin_map2basin(v, m)
+    assert np.isfinite(out[m]).all()
