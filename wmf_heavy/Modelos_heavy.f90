@@ -1242,9 +1242,9 @@ module models
     end do
   end subroutine flood_debris_flow
 
-  subroutine flood_debris_flow2(celda, areas, dif)
+  subroutine flood_debris_flow2(celda, area, dif)
     integer, intent(in)  :: celda
-    real, intent(out)    :: areas, dif
+    real, intent(out)    :: area, dif
 
     integer :: i
     real :: Qp, fondo, linea

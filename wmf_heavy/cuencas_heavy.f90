@@ -1361,6 +1361,8 @@ subroutine drain_colfil(dir, col_obj, fil_obj)
     end select
 end subroutine drain_colfil
 
+end module cu
+
 !========================================================
 ! BLOQUE EXPERIMENTAL: Rutinas bajo desarrollo, pruebas o legacy
 ! Estas subrutinas NO están integradas al flujo principal.

@@ -1,8 +1,8 @@
 [tool.poetry]
-name = "wmf_heavy"
+name = "wmf"
 version = "0.1.0"
 description = "Water Model Framework (WMF) hydrological modeling package migration python 3.10"
-authors = ["JulianUran uranzea@gmail.com"]
+authors = ["Julian Uran <uranzea@gmail.com>"]
 license = "GPL-3.0-or-later"
 readme = "README.md"
 homepage = "https://github.com/uranzea/wmf_heavy"
@@ -10,8 +10,8 @@ repository = "https://github.com/uranzea/wmf_heavy"
 keywords = ["hydrology", "watershed", "gis", "modeling"]
 
 [tool.poetry.dependencies]
-python = "^3.10"
-numpy = "^1.23"
+python = "^3.6"
+numpy = "^1.22.4"
 pandas = "^1.5"
 scipy = "^1.11"
 matplotlib = "^3.7"
@@ -29,8 +29,8 @@ geospatial = ["rasterio", "gdal", "cartopy", "netcdf4", "shapely", "pyshp"]
 calibration = ["deap"]
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["setuptools", "wheel", "numpy"]
+build-backend = "setuptools.build_meta"
 
 [tool.poetry.scripts]
 wmf-run = "wmf.main:main"
