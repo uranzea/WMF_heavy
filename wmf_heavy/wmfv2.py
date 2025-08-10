@@ -32,6 +32,7 @@ import matplotlib.ticker as mticker
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 # ======= Imports de módulos locales =======
+# Activar implementación en Python del núcleo hidrológico
 USE_PY = True
 
 if USE_PY:
