@@ -35,10 +35,23 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 USE_PY = True
 
 if USE_PY:
-    from wmf_py.cu_py.basics import *  # noqa: F403
-    from wmf_py.cu_py.streams import *  # noqa: F403
-    from wmf_py.cu_py.metrics import *  # noqa: F403
-    from wmf_py.models_py.core import *  # noqa: F403
+    from wmf_py.cu_py.basics import (
+        basin_2map,
+        basin_acum,
+        basin_cut,
+        basin_find,
+        basin_map2basin,
+        dir_reclass_opentopo,
+        dir_reclass_rwatershed,
+    )
+    from wmf_py.models_py.core import ModelParams, ModelState, shia_v1
+    # Intentar importar módulos legacy para funcionalidades aún no
+    # portadas. Si no están disponibles simplemente se omiten.
+    try:  # pragma: no cover - depende de entorno
+        from cu import *  # noqa: F401,F403
+        from models import *  # noqa: F401,F403
+    except Exception:  # pragma: no cover - fallback
+        pass
 else:
     from cu import *  # Módulo de funciones de cuencas (Fortran/C o Python)  # noqa: F401,F403
     from models import *  # Módulo de simulación hidrológica  # noqa: F401,F403
