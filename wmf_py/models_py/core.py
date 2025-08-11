@@ -202,6 +202,10 @@ def shia_v1(
         drena = params.drena * storage_aqu
         storage_aqu = storage_aqu - q_base + drena
 
+        overflow_cap = np.maximum(storage_cap - params.max_capilar, 0.0)
+        storage_cap -= overflow_cap
+        exceso_super += overflow_cap
+
         storage_cap = np.clip(storage_cap, 0.0, params.max_capilar)
         storage_grav = np.clip(storage_grav, 0.0, params.max_gravita)
         storage_aqu = np.clip(storage_aqu, 0.0, params.max_aquifer)

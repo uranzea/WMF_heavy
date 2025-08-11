@@ -130,9 +130,7 @@ def time_to_outlet(
     ny, nx = flowdir.shape
     time_map = np.full((ny, nx), np.nan, dtype=float)
 
-    receivers = np.full((ny, nx, 2), -1, dtype=int)
-    indegree = np.zeros((ny, nx), dtype=int)
-
+    donors = [[[] for _ in range(nx)] for _ in range(ny)]
     for r in range(ny):
         for c in range(nx):
             if not mask_basin[r, c]:
@@ -142,24 +140,7 @@ def time_to_outlet(
                 continue
             rr, cc = r + off[0], c + off[1]
             if 0 <= rr < ny and 0 <= cc < nx and mask_basin[rr, cc]:
-                receivers[r, c] = (rr, cc)
-                indegree[rr, cc] += 1
-
-    order: list[tuple[int, int]] = []
-    q: deque[tuple[int, int]] = deque()
-    for r in range(ny):
-        for c in range(nx):
-            if mask_basin[r, c] and indegree[r, c] == 0:
-                q.append((r, c))
-    while q:
-        r, c = q.popleft()
-        order.append((r, c))
-        rr, cc = receivers[r, c]
-        if rr == -1:
-            continue
-        indegree[rr, cc] -= 1
-        if indegree[rr, cc] == 0:
-            q.append((rr, cc))
+                donors[rr][cc].append((r, c))
 
     S_min = params.get("S_min", 1e-4)
     n_over = params.get("n_overland")
@@ -169,39 +150,37 @@ def time_to_outlet(
 
     diag_len = float(np.hypot(dx, dy))
 
-    cell_time = np.full((ny, nx), np.nan, dtype=float)
-    for r in range(ny):
-        for c in range(nx):
-            if not mask_basin[r, c]:
+    q: deque[tuple[int, int]] = deque([outlet_rc])
+    time_map[outlet_rc] = 0.0
+    visited = np.zeros((ny, nx), dtype=bool)
+    visited[outlet_rc] = True
+
+    while q:
+        r, c = q.popleft()
+        base_time = time_map[r, c]
+        for dr, dc in donors[r][c]:
+            if visited[dr, dc]:
                 continue
-            S = max(float(slope[r, c]), S_min)
-            if stream_mask[r, c]:
+            S = max(float(slope[dr, dc]), S_min)
+            if stream_mask[dr, dc]:
                 v = travel_velocity_manning(S, n_ch, h_ch)
             else:
                 v = travel_velocity_manning(S, n_over, h_over)
-            code = int(flowdir[r, c])
-            off = _D8.get(code)
+            off = _D8.get(int(flowdir[dr, dc]))
             if not off:
-                L = 0.0
-            elif off[0] != 0 and off[1] != 0:
+                continue
+            if off[0] != 0 and off[1] != 0:
                 L = diag_len
             elif off[0] == 0:
                 L = dx
             else:
                 L = dy
-            cell_time[r, c] = L / v if v > 0 else np.nan
-
-    for r, c in reversed(order):
-        if not mask_basin[r, c]:
-            continue
-        if (r, c) == outlet_rc:
-            time_map[r, c] = 0.0
-            continue
-        rr, cc = receivers[r, c]
-        if rr == -1 or np.isnan(cell_time[r, c]):
-            time_map[r, c] = np.nan
-        else:
-            time_map[r, c] = cell_time[r, c] + time_map[rr, cc]
+            t = L / v if v > 0 else np.nan
+            if np.isnan(t):
+                continue
+            time_map[dr, dc] = base_time + t
+            visited[dr, dc] = True
+            q.append((dr, dc))
 
     time_map[~mask_basin] = np.nan
     return time_map
@@ -239,8 +218,7 @@ def hydro_distance_and_receiver(
 
     ny, nx = flowdir.shape
 
-    receivers = np.full((ny, nx, 2), -1, dtype=int)
-    indegree = np.zeros((ny, nx), dtype=int)
+    donors = [[[] for _ in range(nx)] for _ in range(ny)]
     for r in range(ny):
         for c in range(nx):
             if not mask_basin[r, c]:
@@ -250,51 +228,40 @@ def hydro_distance_and_receiver(
                 continue
             rr, cc = r + off[0], c + off[1]
             if 0 <= rr < ny and 0 <= cc < nx and mask_basin[rr, cc]:
-                receivers[r, c] = (rr, cc)
-                indegree[rr, cc] += 1
-
-    order: list[tuple[int, int]] = []
-    q: deque[tuple[int, int]] = deque()
-    for r in range(ny):
-        for c in range(nx):
-            if mask_basin[r, c] and indegree[r, c] == 0:
-                q.append((r, c))
-    while q:
-        r, c = q.popleft()
-        order.append((r, c))
-        rr, cc = receivers[r, c]
-        if rr == -1:
-            continue
-        indegree[rr, cc] -= 1
-        if indegree[rr, cc] == 0:
-            q.append((rr, cc))
+                donors[rr][cc].append((r, c))
 
     diag_len = float(np.hypot(dx, dy))
     hdnd = np.full((ny, nx), np.nan, dtype=float)
     aquien = np.full((ny, nx), -1, dtype=int)
 
-    for r, c in reversed(order):
-        if not mask_basin[r, c]:
-            continue
-        if stream_mask[r, c]:
-            hdnd[r, c] = 0.0
-            aquien[r, c] = r * nx + c
-            continue
-        rr, cc = receivers[r, c]
-        if rr == -1 or np.isnan(hdnd[rr, cc]):
-            continue
-        code = int(flowdir[r, c])
-        off = _D8.get(code)
-        if not off:
-            continue
-        if off[0] != 0 and off[1] != 0:
-            L = diag_len
-        elif off[0] == 0:
-            L = dx
-        else:
-            L = dy
-        hdnd[r, c] = L + hdnd[rr, cc]
-        aquien[r, c] = rr * nx + cc if stream_mask[rr, cc] else aquien[rr, cc]
+    q: deque[tuple[int, int]] = deque()
+    visited = np.zeros((ny, nx), dtype=bool)
+    for r in range(ny):
+        for c in range(nx):
+            if stream_mask[r, c] and mask_basin[r, c]:
+                hdnd[r, c] = 0.0
+                aquien[r, c] = r * nx + c
+                q.append((r, c))
+                visited[r, c] = True
+
+    while q:
+        r, c = q.popleft()
+        for dr, dc in donors[r][c]:
+            if visited[dr, dc]:
+                continue
+            off = _D8.get(int(flowdir[dr, dc]))
+            if not off:
+                continue
+            if off[0] != 0 and off[1] != 0:
+                L = diag_len
+            elif off[0] == 0:
+                L = dx
+            else:
+                L = dy
+            hdnd[dr, dc] = hdnd[r, c] + L
+            aquien[dr, dc] = aquien[r, c]
+            visited[dr, dc] = True
+            q.append((dr, dc))
 
     hdnd[~mask_basin] = np.nan
     aquien[~mask_basin] = -1

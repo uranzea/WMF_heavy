@@ -391,25 +391,5 @@ from .metrics import (  # noqa: E402  (imported late to avoid circular refs)
     basin_subbasin_horton,
     basin_subbasin_map2subbasin,
     basin_subbasin_nod,
+    hydro_distance_and_receiver,
 )
-
-
-
-def stream_seed_from_coords(*args, **kwargs):
-    """Placeholder for legacy functionality."""
-    raise NotImplementedError("stream_seed_from_coords is not implemented")
-
-
-def stream_threshold_nearby(*args, **kwargs):
-    """Placeholder for legacy functionality."""
-    raise NotImplementedError("stream_threshold_nearby is not implemented")
-
-
-def stream_find_nearby(*args, **kwargs):
-    """Placeholder for legacy functionality."""
-    raise NotImplementedError("stream_find_nearby is not implemented")
-
-
-def hydro_distance_and_receiver(*args, **kwargs):
-    """Placeholder for legacy functionality."""
-    raise NotImplementedError("hydro_distance_and_receiver is not implemented")
