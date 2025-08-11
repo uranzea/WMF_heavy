@@ -67,3 +67,68 @@ def test_basin_netxy_remove_tributary():
     assert len(nodes) == 2
     assert len(edges) == 1
 
+
+def test_stream_seed_from_coords_tie_break():
+    acum = np.zeros((5, 5), dtype=int)
+    acum[1, 2] = 10
+    acum[3, 1] = 10
+    xll = yll = 0.0
+    dx = dy = 1.0
+    # Coordinates correspond to cell (1,1)
+    info = streams.stream_seed_from_coords(
+        acum, 1.5, 1.5, xll, yll, dx, dy, outlet_rc=(0, 0), search_radius_cells=3
+    )
+    assert info["seed_rc"] == (1, 2)
+
+
+def test_stream_threshold_nearby_selects_highest():
+    acum = np.array(
+        [
+            [5, 4, 3],
+        ]
+    )
+    flowdir = np.array([[0, 0, 0]])  # east
+    seed_rc = (0, 0)
+    outlet_rc = (0, 2)
+    thr = streams.stream_threshold_nearby(
+        acum, seed_rc, flowdir, outlet_rc, [5, 4, 3]
+    )
+    assert thr == 3
+
+
+def test_stream_threshold_nearby_min_feasible():
+    acum = np.array([[5, 4, 3]])
+    flowdir = np.array([[0, 0, 0]])
+    seed_rc = (0, 0)
+    outlet_rc = (0, 2)
+    thr = streams.stream_threshold_nearby(acum, seed_rc, flowdir, outlet_rc, [6, 5])
+    assert thr == 5
+
+
+def test_stream_find_nearby_integration():
+    acum = np.array(
+        [
+            [5, 4, 3],
+        ]
+    )
+    flowdir = np.array([[0, 0, 0]])
+    mask = np.ones_like(acum, dtype=bool)
+    res = streams.stream_find_nearby(
+        acum,
+        flowdir,
+        x=0.5,
+        y=0.5,
+        xll=0.0,
+        yll=0.0,
+        dx=1.0,
+        dy=1.0,
+        outlet_rc=(0, 2),
+        mask_basin=mask,
+        candidate_thresholds=[5, 4, 3],
+    )
+    assert res["threshold"] == 3
+    assert res["stream"][0, 2]
+    # ensure no islands
+    corrected = streams.stream_find_to_corr(res["stream"].astype(int), flowdir, (0, 2))
+    assert corrected.sum() == res["stream"].sum()
+
