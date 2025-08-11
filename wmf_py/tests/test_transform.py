@@ -35,3 +35,30 @@ def test_transform_idempotent() -> None:
     # also test Transform_Basin2Map wrapper
     out = Transform_Basin2Map(values, map_shape, idx, fill=nodata)
     assert np.array_equal(out, m)
+
+
+def test_transform_basin2map_roundtrip_checkerboard() -> None:
+    map_shape = (5, 5)
+    mask = np.indices(map_shape).sum(axis=0) % 2 == 0
+    idx = np.flatnonzero(mask.ravel(order="C"))
+    values = np.arange(idx.size, dtype=float)
+    fill = -999.0
+    out = Transform_Basin2Map(values, map_shape, idx, fill=fill)
+    # placed values should be recoverable via original indices
+    assert np.array_equal(out.ravel(order="C")[idx], values)
+    # cells outside the basin should hold the fill value
+    assert np.all(out[~mask] == fill)
+
+
+def test_transform_basin2map_index_out_of_range() -> None:
+    values = np.array([1, 2, 3])
+    idx = np.array([0, 1, 4])  # 4 is outside a 2x2 grid
+    with pytest.raises(ValueError):
+        Transform_Basin2Map(values, (2, 2), idx, fill=0.0)
+
+
+def test_transform_basin2map_size_mismatch() -> None:
+    values = np.array([1, 2, 3])
+    idx = np.array([0, 1])  # fewer indices than values
+    with pytest.raises(ValueError):
+        Transform_Basin2Map(values, (2, 2), idx, fill=0.0)
