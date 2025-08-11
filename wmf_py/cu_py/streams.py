@@ -193,6 +193,10 @@ def _connects_to_outlet(
         if not (0 <= r < ny and 0 <= c < nx):
             return False
 
+    # Should never be reached, but keeps the type checker happy and
+    # documents the fact that lack of a path implies disconnection.
+    return False
+
 
 def stream_threshold_nearby(
     acum: np.ndarray,
