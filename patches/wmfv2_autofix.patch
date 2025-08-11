@@ -1,0 +1,34 @@
+diff --git a/wmf_heavy/wmfv2.py b/wmf_heavy/wmfv2.py
+index c17d5ba..e09826a 100644
+--- a/wmf_heavy/wmfv2.py
++++ b/wmf_heavy/wmfv2.py
+@@ -36,6 +36,8 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
+ USE_PY = True
+ 
+ if USE_PY:
++    import wmf_py.cu_py.basics as cu
++    import wmf_py.models_py.core as models
+     from wmf_py.cu_py.basics import (
+         basin_2map,
+         basin_acum,
+@@ -44,18 +46,8 @@ if USE_PY:
+         basin_map2basin,
+         dir_reclass_opentopo,
+         dir_reclass_rwatershed,
+-    )
+-    from wmf_py.models_py.core import ModelParams, ModelState, shia_v1
+-    # Intentar importar módulos legacy para funcionalidades aún no
+-    # portadas. Si no están disponibles simplemente se omiten.
+-    try:  # pragma: no cover - depende de entorno
+-        from cu import *  # noqa: F401,F403
+-        from models import *  # noqa: F401,F403
+-    except Exception:  # pragma: no cover - fallback
+-        pass
+-else:
+-    from cu import *  # Módulo de funciones de cuencas (Fortran/C o Python)  # noqa: F401,F403
+-    from models import *  # Módulo de simulación hidrológica  # noqa: F401,F403
++    )  # noqa: F401
++    from wmf_py.models_py.core import ModelParams, ModelState, shia_v1  # noqa: F401
+ 
+ # ======= Dependencias opcionales =======
+ 
