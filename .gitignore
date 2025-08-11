@@ -9,3 +9,10 @@ __pycache__/
 # Ignore OS files
 .DS_Store
 .vscode/settings.json
+examples/data/Dem_2m_palmitas_4326.tif
+examples/data/Dem_2m_palmitas_4326.tif.aux.xml
+.gitignore
+examples/data/DIR_2m_palmitas_4326.tfw
+examples/data/DIR_2m_palmitas_4326.tif
+.gitignore
+examples/data/DIR_2m_palmitas_4326.tif.aux.xml

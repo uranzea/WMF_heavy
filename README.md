@@ -33,14 +33,14 @@ Water Model Framework (WMF) es un conjunto avanzado de herramientas para modelac
 Se recomienda crear un entorno Conda a partir del archivo `environment.yml`:
 
 conda env create -f environment.yml
-conda activate wmf_env
+conda activate wmf
 
 Alternativamente, puede instalarse mediante Poetry con el archivo `pyproject.toml` para manejo completo de dependencias.
 
 También es posible instalar directamente con `pip`:
 
 ```
-pip install .
+pip install e .
 ```
 
 > Nota: la compilación de archivos Fortran (`*.f90`) ya no es necesaria; todo el paquete se distribuye como código Python puro.

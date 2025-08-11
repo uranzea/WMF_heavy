@@ -2,31 +2,41 @@ name: wmf
 channels:
   - conda-forge
 dependencies:
-  - python=3.60  # Versión recomendada, compatible con la mayoría de paquetes actuales
-  - numpy>=1.22.4,<2
-  - pandas>=1.5,<2
-  - scipy>=1.11,<2
-  - matplotlib>=3.7,<4
-  - pyproj>=3.5,<4          # Para gestión de CRS (EPSG codes)
-  - rasterio>=1.3,<2        # Para manejo raster (si se usa)
-  - gdal>=3.8,<4            # Para lectura/escritura geoespacial
-  - cartopy>=0.21,<1        # Visualización geográfica avanzada
-  - netcdf4>=1.6,<2         # Manipulación de archivos NetCDF
-  - deap>=1.3,<2            # Algoritmos genéticos para calibración
-  - pip                     # Para poder instalar paquetes PyPI adicionales si se requiere
+  # Core
+  - python=3.10
+  - numpy>=1.24,<2
+  - pandas=2.2.*
+  - scipy=1.13.*
+  - matplotlib>=3.8,<3.10
+  - pip
 
-  # Opcional (no imprescindible, pero recomendado si se usa parte geoespacial avanzada)
-  - shapely>=2.0,<3
-  - pyshp>=2.3,<3
-  - cartopy                 # puede ir de canal con gdal y proj
+  # Geospatial core
+  - gdal=3.8.*           # Incluye bindings Python + binarios nativos
+  - rasterio=1.3.*       # Compatible con gdal 3.8
+  - pyproj=3.6.*
+  - cartopy=0.22.*
+  - shapely=2.0.*
+  - pyshp=2.3.*
+  - netcdf4=1.6.*
 
-  # Si usas jupyter
-  - jupyterlab
+  # Raster y análisis multidimensional
+  - rioxarray=0.15.*
+  - xarray>=2024.6
+  - dask>=2024.6
 
+  # Calibración y optimización
+  - deap=1.3.*
+
+  # Desarrollo
+  - jupyter
+  - black
+  - isort
+  - poetry
+  
   # Si quieres paquetes extra para análisis y gráficos ricos
   - seaborn
 
-# Si tienes dependencias pip requeridas no instalables con conda, listarlas aquí 
+  # Si tienes dependencias pip requeridas no instalables con conda, listarlas aquí 
 # (por ejemplo alguna dependencia directa de PySheds o módulos no dispo en conda)
 # pip:
 #   - pysheds
