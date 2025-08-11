@@ -93,6 +93,8 @@ def _reclass(flowdir: np.ndarray, table: Dict[int, int]) -> np.ndarray:
     vals = np.unique(flowdir)
     valid_ext = set(table.keys())
     valid_internal = set(range(8))
+    if set(int(v) for v in vals).issubset(valid_internal):
+        return flowdir.astype(int, copy=True)
     unknown = {
         int(v)
         for v in vals
