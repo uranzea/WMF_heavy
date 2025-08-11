@@ -93,7 +93,10 @@ def shia_v1(
         Updated model state after ``nsteps``.
     Dict[str, ndarray]
         Diagnostics with keys depending on selected options.  At least
-        ``q_outlet`` is returned.
+        ``q_outlet`` is returned.  If the ``grid`` dictionary contains
+        cell dimensions ``dx`` and ``dy`` (in metres), ``q_outlet`` is
+        expressed as discharge in cubic metres per second.  Otherwise it
+        represents the domain‑integrated water depth in millimetres.
     """
 
     rain = forcings.get("rain_mm_h")
@@ -107,6 +110,9 @@ def shia_v1(
     dt_d = dt / 86400.0
 
     q_outlet = np.zeros(nsteps, dtype=float)
+    cell_area = None
+    if "dx" in grid and "dy" in grid:
+        cell_area = float(grid["dx"]) * float(grid["dy"])
 
     q_super_t = q_base_t = q_total_t = None
     if params.separate_fluxes:
@@ -221,7 +227,11 @@ def shia_v1(
             storage_grav_t[t] = storage_grav
             storage_aqu_t[t] = storage_aqu
 
-        q_outlet[t] = np.sum(q_total)
+        q_total_sum = np.sum(q_total)
+        if cell_area is None:
+            q_outlet[t] = q_total_sum
+        else:
+            q_outlet[t] = q_total_sum * 1.0e-3 * cell_area / dt
 
         new_storage_sum = np.sum(storage_cap + storage_grav + storage_aqu)
         deltaS = new_storage_sum - prev_storage_sum
