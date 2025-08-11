@@ -76,9 +76,58 @@ def test_stream_seed_from_coords_tie_break():
     dx = dy = 1.0
     # Coordinates correspond to cell (1,1)
     info = streams.stream_seed_from_coords(
-        acum, 1.5, 1.5, xll, yll, dx, dy, outlet_rc=(0, 0), search_radius_cells=3
+        acum,
+        1.5,
+        1.5,
+        xll,
+        yll,
+        dx,
+        dy,
+        outlet_rc=(0, 0),
+        search_radius_cells=3,
     )
     assert info["seed_rc"] == (1, 2)
+
+
+def test_stream_seed_from_coords_truncated_window():
+    acum = np.arange(9).reshape((3, 3))
+    xll = yll = 0.0
+    dx = dy = 1.0
+    info = streams.stream_seed_from_coords(
+        acum,
+        0.1,
+        0.1,
+        xll,
+        yll,
+        dx,
+        dy,
+        outlet_rc=(0, 0),
+        search_radius_cells=4,
+    )
+    assert info["seed_rc"] == (2, 2)
+
+
+def test_stream_seed_from_coords_mask():
+    acum = np.zeros((3, 3), dtype=int)
+    acum[0, 1] = 5
+    acum[1, 0] = 5
+    mask = np.zeros_like(acum, dtype=bool)
+    mask[1, 0] = True
+    xll = yll = 0.0
+    dx = dy = 1.0
+    info = streams.stream_seed_from_coords(
+        acum,
+        0.2,
+        0.2,
+        xll,
+        yll,
+        dx,
+        dy,
+        outlet_rc=(0, 0),
+        search_radius_cells=1,
+        mask_basin=mask,
+    )
+    assert info["seed_rc"] == (1, 0)
 
 
 def test_stream_threshold_nearby_selects_highest():
@@ -103,6 +152,16 @@ def test_stream_threshold_nearby_min_feasible():
     outlet_rc = (0, 2)
     thr = streams.stream_threshold_nearby(acum, seed_rc, flowdir, outlet_rc, [6, 5])
     assert thr == 5
+
+
+def test_stream_threshold_nearby_seed_missing_raises():
+    """When all thresholds exclude the seed cell a ValueError is raised."""
+    acum = np.array([[5, 4, 3]])
+    flowdir = np.array([[0, 0, 0]])
+    seed_rc = (0, 0)
+    outlet_rc = (0, 2)
+    with pytest.raises(ValueError):
+        streams.stream_threshold_nearby(acum, seed_rc, flowdir, outlet_rc, [7, 6])
 
 
 def test_stream_find_nearby_integration():
