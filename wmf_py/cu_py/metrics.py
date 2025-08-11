@@ -207,6 +207,100 @@ def time_to_outlet(
     return time_map
 
 
+def hydro_distance_and_receiver(
+    flowdir: np.ndarray,
+    stream_mask: np.ndarray,
+    mask_basin: np.ndarray,
+    dx: float,
+    dy: float,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Hydrologic distance to stream and receiving stream cell.
+
+    Parameters
+    ----------
+    flowdir : ndarray of int
+        D8 flow direction codes using the internal convention.
+    stream_mask : ndarray of bool
+        Boolean mask of stream cells.
+    mask_basin : ndarray of bool
+        Basin mask where ``True`` denotes active cells.
+    dx, dy : float
+        Cell resolution in metres.
+
+    Returns
+    -------
+    tuple of ndarray
+        ``(hdnd_model, a_quien)`` where ``hdnd_model`` contains the accumulated
+        downstream distance to the first stream cell and ``a_quien`` the linear
+        index of that receiving stream cell.  ``hdnd_model`` is ``nan`` outside
+        the basin and zero on stream cells; ``a_quien`` is ``-1`` outside the
+        basin and equals the cell's own index on stream cells.
+    """
+
+    ny, nx = flowdir.shape
+
+    receivers = np.full((ny, nx, 2), -1, dtype=int)
+    indegree = np.zeros((ny, nx), dtype=int)
+    for r in range(ny):
+        for c in range(nx):
+            if not mask_basin[r, c]:
+                continue
+            off = _D8.get(int(flowdir[r, c]))
+            if not off:
+                continue
+            rr, cc = r + off[0], c + off[1]
+            if 0 <= rr < ny and 0 <= cc < nx and mask_basin[rr, cc]:
+                receivers[r, c] = (rr, cc)
+                indegree[rr, cc] += 1
+
+    order: list[tuple[int, int]] = []
+    q: deque[tuple[int, int]] = deque()
+    for r in range(ny):
+        for c in range(nx):
+            if mask_basin[r, c] and indegree[r, c] == 0:
+                q.append((r, c))
+    while q:
+        r, c = q.popleft()
+        order.append((r, c))
+        rr, cc = receivers[r, c]
+        if rr == -1:
+            continue
+        indegree[rr, cc] -= 1
+        if indegree[rr, cc] == 0:
+            q.append((rr, cc))
+
+    diag_len = float(np.hypot(dx, dy))
+    hdnd = np.full((ny, nx), np.nan, dtype=float)
+    aquien = np.full((ny, nx), -1, dtype=int)
+
+    for r, c in reversed(order):
+        if not mask_basin[r, c]:
+            continue
+        if stream_mask[r, c]:
+            hdnd[r, c] = 0.0
+            aquien[r, c] = r * nx + c
+            continue
+        rr, cc = receivers[r, c]
+        if rr == -1 or np.isnan(hdnd[rr, cc]):
+            continue
+        code = int(flowdir[r, c])
+        off = _D8.get(code)
+        if not off:
+            continue
+        if off[0] != 0 and off[1] != 0:
+            L = diag_len
+        elif off[0] == 0:
+            L = dx
+        else:
+            L = dy
+        hdnd[r, c] = L + hdnd[rr, cc]
+        aquien[r, c] = rr * nx + cc if stream_mask[rr, cc] else aquien[rr, cc]
+
+    hdnd[~mask_basin] = np.nan
+    aquien[~mask_basin] = -1
+    return hdnd, aquien
+
+
 def hand(
     dem: np.ndarray,
     flowdir: np.ndarray,

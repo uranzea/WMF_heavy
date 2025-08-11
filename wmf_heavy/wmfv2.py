@@ -45,6 +45,14 @@ if USE_PY:
         dir_reclass_opentopo,
         dir_reclass_rwatershed,
     )
+    from wmf_py.cu_py.streams import (
+        stream_find_nearby,
+        stream_find,
+        stream_cut,
+        stream_find_to_corr,
+    )
+    from wmf_py.cu_py.metrics import hydro_distance_and_receiver
+    from wmf_py.utils.config import load_config
     from wmf_py.models_py.core import ModelParams, ModelState, shia_v1
     # Intentar importar módulos legacy para funcionalidades aún no
     # portadas. Si no están disponibles simplemente se omiten.
@@ -2263,3 +2271,75 @@ class Stream:
         if path is not None:
             pl.savefig(path, bbox_inches='tight')
         pl.show()
+
+
+# ---------------------------------------------------------------------------
+# Simplified pipeline extensions (Python implementation)
+# ---------------------------------------------------------------------------
+
+def integracion_por_coordenadas(
+    acum: np.ndarray,
+    flowdir: np.ndarray,
+    mask_basin: np.ndarray,
+    config_path: str,
+    xll: float,
+    yll: float,
+    dx: float,
+    dy: float,
+    outlet_rc: tuple[int, int],
+):
+    """Example of stream extraction using coordinate seeds.
+
+    This helper is a lightweight wrapper used by the tests.  It loads the
+    configuration, invokes :func:`stream_find_nearby` when ``seed_coords`` are
+    present and falls back to a simple threshold otherwise.
+    """
+
+    cfg = load_config(config_path)
+    if cfg.seed_coords is not None:
+        sc = cfg.seed_coords
+        cand = cfg.streams.candidate_thresholds
+        return stream_find_nearby(
+            acum,
+            flowdir,
+            sc.x,
+            sc.y,
+            xll,
+            yll,
+            dx,
+            dy,
+            outlet_rc,
+            mask_basin,
+            search_radius_cells=sc.search_radius_cells,
+            candidate_thresholds=cand,
+        )
+
+    thr = 1
+    if cfg.streams.candidate_thresholds:
+        thr = cfg.streams.candidate_thresholds[0]
+    stream = stream_find(acum, thr)
+    stream = stream_cut(stream, mask_basin)
+    stream = stream_find_to_corr(stream, flowdir, outlet_rc)
+    return {"stream": stream.astype(bool), "threshold": thr, "seed_rc": outlet_rc}
+
+
+def salidas_hdnd_a_quien(
+    flowdir: np.ndarray,
+    stream_mask: np.ndarray,
+    mask_basin: np.ndarray,
+    dx: float,
+    dy: float,
+    out_dir: str,
+    write_hdnd: bool = True,
+    write_aquien: bool = True,
+):
+    """Generate hydrologic distance and receiver rasters."""
+
+    if not (write_hdnd or write_aquien):
+        return
+    hdnd, aquien = hydro_distance_and_receiver(flowdir, stream_mask, mask_basin, dx, dy)
+    os.makedirs(out_dir, exist_ok=True)
+    if write_hdnd:
+        np.save(os.path.join(out_dir, "hdnd_model.npy"), hdnd.astype(np.float32))
+    if write_aquien:
+        np.save(os.path.join(out_dir, "a_quien.npy"), aquien.astype(np.int32))

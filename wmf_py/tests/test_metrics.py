@@ -4,6 +4,7 @@ from wmf_py.cu_py.metrics import (
     hypsometric_curve,
     time_to_outlet,
     hand,
+    hydro_distance_and_receiver,
 )
 
 # Default parameters for time_to_outlet tests
@@ -146,3 +147,41 @@ def test_hand_two_streams_flow_path():
     # Cell (0,2) flows to stream (2,0) even though (2,2) is closer
     assert h[0, 2] == dem[0, 2] - dem[2, 0]
     assert h[1, 2] == dem[1, 2] - dem[2, 2]
+
+
+def test_hydro_distance_and_receiver_basic():
+    flowdir = np.array(
+        [
+            [0, 2, 4],
+            [0, 0, 4],
+            [6, 6, 6],
+        ],
+        dtype=int,
+    )
+    stream = np.zeros((3, 3), dtype=bool)
+    stream[1, 1] = True
+    mask = np.ones_like(stream, dtype=bool)
+    hdnd, aquien = hydro_distance_and_receiver(flowdir, stream, mask, 1.0, 1.0)
+    assert hdnd[1, 1] == 0.0
+    assert aquien[1, 1] == 4  # 1*3 + 1
+    assert hdnd[0, 0] > hdnd[0, 1] > hdnd[1, 1]
+    assert aquien[0, 0] == aquien[0, 1] == 4
+
+
+def test_hydro_distance_and_receiver_two_streams():
+    flowdir = np.array(
+        [
+            [2, 2, 2],
+            [2, 2, 2],
+            [0, 0, 0],
+        ],
+        dtype=int,
+    )
+    mask = np.ones_like(flowdir, dtype=bool)
+    stream = np.zeros_like(flowdir, dtype=bool)
+    stream[2, 0] = True
+    stream[2, 2] = True
+    hdnd, aquien = hydro_distance_and_receiver(flowdir, stream, mask, 1.0, 1.0)
+    assert aquien[0, 0] == 6  # index of (2,0)
+    assert aquien[0, 2] == 8  # index of (2,2)
+    assert hdnd[0, 0] > hdnd[1, 0] > hdnd[2, 0]
