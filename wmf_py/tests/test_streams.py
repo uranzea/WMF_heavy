@@ -154,6 +154,16 @@ def test_stream_threshold_nearby_min_feasible():
     assert thr == 5
 
 
+def test_stream_threshold_nearby_seed_missing_raises():
+    """When all thresholds exclude the seed cell a ValueError is raised."""
+    acum = np.array([[5, 4, 3]])
+    flowdir = np.array([[0, 0, 0]])
+    seed_rc = (0, 0)
+    outlet_rc = (0, 2)
+    with pytest.raises(ValueError):
+        streams.stream_threshold_nearby(acum, seed_rc, flowdir, outlet_rc, [7, 6])
+
+
 def test_stream_find_nearby_integration():
     acum = np.array(
         [
