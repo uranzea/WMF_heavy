@@ -97,7 +97,7 @@ def stream_seed_from_coords(
     dy: float,
     outlet_rc: Tuple[int, int],
     search_radius_cells: int = 4,
-    min_threshold: int = 1,
+    mask_basin: np.ndarray | None = None,
 ) -> Dict[str, Any]:
     """Locate a seed cell near provided map coordinates.
 
@@ -122,8 +122,9 @@ def stream_seed_from_coords(
         Unused but kept for API compatibility.
     search_radius_cells : int, optional
         Radius of the search window in cells (default ``4``).
-    min_threshold : int, optional
-        Minimum accumulation value to consider a cell (default ``1``).
+    mask_basin : ndarray of bool, optional
+        If provided, restrict the search to cells where ``mask_basin`` is
+        ``True``.
 
     Returns
     -------
@@ -142,18 +143,19 @@ def stream_seed_from_coords(
     cmin = max(c0 - search_radius_cells, 0)
     cmax = min(c0 + search_radius_cells, nx - 1)
 
-    best_rc = None
-    best_val = min_threshold - 1
-    best_dist = None
+    best_rc: Tuple[int, int] | None = None
+    best_val: int | None = None
+    best_dist: int | None = None
 
     for rr in range(rmin, rmax + 1):
         for cc in range(cmin, cmax + 1):
-            val = int(acum[rr, cc])
-            if val < min_threshold:
+            if mask_basin is not None and not mask_basin[rr, cc]:
                 continue
+            val = int(acum[rr, cc])
             dist = abs(rr - r0) + abs(cc - c0)
             if (
-                val > best_val
+                best_val is None
+                or val > best_val
                 or (val == best_val and (best_dist is None or dist < best_dist))
             ):
                 best_val = val
@@ -192,6 +194,10 @@ def _connects_to_outlet(
         c += off[1]
         if not (0 <= r < ny and 0 <= c < nx):
             return False
+
+    # Should never be reached, but keeps the type checker happy and
+    # documents the fact that lack of a path implies disconnection.
+    return False
 
 
 def stream_threshold_nearby(
@@ -257,6 +263,7 @@ def stream_find_nearby(
         dy,
         outlet_rc,
         search_radius_cells=search_radius_cells,
+        mask_basin=mask_basin,
     )
     seed_rc = seed_info["seed_rc"]
 
@@ -384,5 +391,5 @@ from .metrics import (  # noqa: E402  (imported late to avoid circular refs)
     basin_subbasin_horton,
     basin_subbasin_map2subbasin,
     basin_subbasin_nod,
+    hydro_distance_and_receiver,
 )
-

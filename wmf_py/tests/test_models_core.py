@@ -3,8 +3,8 @@ import numpy as np
 from wmf_py.models_py.core import ModelParams, ModelState, shia_v1
 
 
-def test_mass_balance_simple() -> None:
-    ny, nx, nt = 5, 5, 3
+def test_mass_balance_24_steps() -> None:
+    ny, nx, nt = 5, 5, 24
     dt = 3600.0
     rain = np.full((nt, ny, nx), 10.0)  # mm/h
     forc = {"rain_mm_h": rain}
@@ -47,8 +47,11 @@ def test_mass_balance_simple() -> None:
             + np.sum(state.storage_aquifer)
         )
     )
-    mb = abs(rain_total - delta_storage - np.sum(out["q_outlet"])) / rain_total
+    area = grid["dx"] * grid["dy"]
+    q_mm = out["q_outlet"] * dt / (area * 1e-3)
+    mb = abs(rain_total - delta_storage - np.sum(q_mm)) / rain_total
     assert mb <= 0.005
+    assert np.all(out["diag"]["mass_error_cum"] <= 0.005)
 
 
 def test_baseflow_activation() -> None:
@@ -149,6 +152,41 @@ def test_fluxes_and_shapes() -> None:
     state2, out = shia_v1(forc, {}, params, state, nsteps=1)
 
     assert out["q_super_t"].shape == (1, 1, 1)
+    assert out["q_base_t"].shape == (1, 1, 1)
+    assert out["q_total_t"].shape == (1, 1, 1)
+    assert out["q_outlet"].shape == (1,)
     assert out["storage_capilar_t"].shape == (1, 1, 1)
+    assert out["storage_gravita_t"].shape == (1, 1, 1)
+    assert out["storage_aquifer_t"].shape == (1, 1, 1)
     assert np.isclose(out["q_super_t"][0, 0, 0], 40.0)
     assert np.isclose(out["q_outlet"][0], 40.0)
+
+    params2 = ModelParams(
+        dt=dt,
+        h_coef=1,
+        h_exp=1,
+        v_coef=1,
+        v_exp=1,
+        max_capilar=100,
+        max_gravita=100,
+        max_aquifer=100,
+        drena=0.0,
+        retorno_gr=0.0,
+        storage_constant=0.0,
+        k_perc_cap_to_grav=0.0,
+        k_perc_grav_to_aqu=0.0,
+        k_baseflow=0.0,
+        max_infil_mm_h=10.0,
+        eta_priority="capilar_first",
+        separate_fluxes=False,
+        save_vfluxes=False,
+        save_storage=False,
+        verbose=False,
+    )
+    _, out2 = shia_v1(forc, {}, params2, state, nsteps=1)
+    assert "q_super_t" not in out2
+    assert "q_base_t" not in out2
+    assert "q_total_t" not in out2
+    assert "storage_capilar_t" not in out2
+    assert "storage_gravita_t" not in out2
+    assert "storage_aquifer_t" not in out2

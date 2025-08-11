@@ -37,6 +37,14 @@ conda activate wmf_env
 
 Alternativamente, puede instalarse mediante Poetry con el archivo `pyproject.toml` para manejo completo de dependencias.
 
+También es posible instalar directamente con `pip`:
+
+```
+pip install .
+```
+
+> Nota: la compilación de archivos Fortran (`*.f90`) ya no es necesaria; todo el paquete se distribuye como código Python puro.
+
 ---
 
 ## Uso básico

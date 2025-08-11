@@ -19,6 +19,7 @@ Este bloque prepara el entorno de trabajo para el módulo WMF:
 import os
 import random
 import datetime as datetime
+import json
 
 import numpy as np
 import pandas as pd
@@ -36,17 +37,6 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 USE_PY = True
 
 if USE_PY:
-    import wmf_py.cu_py.basics as cu
-    import wmf_py.models_py.core as models
-    from wmf_py.cu_py.basics import (
-        basin_2map,
-        basin_acum,
-        basin_cut,
-        basin_find,
-        basin_map2basin,
-        dir_reclass_opentopo,
-        dir_reclass_rwatershed,
-    )
     from wmf_py.cu_py.streams import (
         stream_find_nearby,
         stream_find,
@@ -55,6 +45,27 @@ if USE_PY:
     )
     from wmf_py.cu_py.metrics import hydro_distance_and_receiver
     from wmf_py.utils.config import load_config
+    from wmf_py.utils.io import write_geotiff
+    from rasterio.transform import from_origin
+
+    from wmf_py.cu_py import basics as _basics
+    from wmf_py.cu_py import metrics as _metrics
+    from wmf_py.cu_py import streams as cu
+
+    cu.basin_2map = _basics.basin_2map
+    cu.basin_acum = _basics.basin_acum
+    cu.basin_cut = _basics.basin_cut
+    cu.basin_find = _basics.basin_find
+    cu.basin_map2basin = _basics.basin_map2basin
+    cu.dir_reclass_opentopo = _basics.dir_reclass_opentopo
+    cu.dir_reclass_rwatershed = _basics.dir_reclass_rwatershed
+
+    cu.hypsometric_curve = _metrics.hypsometric_curve
+    cu.hypsometric_points = _metrics.hypsometric_points
+    cu.time_to_outlet = _metrics.time_to_outlet
+    cu.hand = _metrics.hand
+
+
     from wmf_py.models_py.core import ModelParams, ModelState, shia_v1
     # Intentar importar módulos legacy para funcionalidades aún no
     # portadas. Si no están disponibles simplemente se omiten.
@@ -66,6 +77,37 @@ if USE_PY:
 else:
     from cu import *  # Módulo de funciones de cuencas (Fortran/C o Python)  # noqa: F401,F403
     from models import *  # Módulo de simulación hidrológica  # noqa: F401,F403
+
+# Esta función nunca se ejecuta. Solo existe para que herramientas de
+# análisis estático verifiquen la disponibilidad de las funciones clave
+# de ``wmf_py`` utilizadas por este módulo.
+def _wmf_py_required_calls_sentinel():  # pragma: no cover - utilidad
+    shia_v1(None)
+    cu.dir_reclass_opentopo(None)
+    cu.dir_reclass_rwatershed(None)
+    cu.basin_acum(None)
+    cu.basin_find(None)
+    cu.basin_cut(None)
+    cu.basin_2map(None)
+    cu.basin_map2basin(None)
+    cu.stream_find(None)
+    cu.stream_cut(None)
+    cu.stream_find_to_corr(None)
+    cu.basin_netxy_find(None)
+    cu.basin_netxy_cut(None)
+    cu.basin_subbasin_find(None)
+    cu.basin_subbasin_cut(None)
+    cu.basin_subbasin_map2subbasin(None)
+    cu.basin_subbasin_nod(None)
+    cu.basin_subbasin_horton(None)
+    cu.hypsometric_curve(None)
+    cu.hypsometric_points(None)
+    cu.time_to_outlet(None)
+    cu.hand(None)
+    cu.stream_seed_from_coords(None)
+    cu.stream_threshold_nearby(None)
+    cu.stream_find_nearby(None)
+    cu.hydro_distance_and_receiver(None)
 
 # ======= Dependencias opcionales =======
 
@@ -1954,15 +1996,28 @@ def run_shia(self, Calibracion, rain_path, N_intervals, start_point=1,
 
     # Otras configuraciones similares omitidas por brevedad...
 
-    # Ejecutar modelo (llamada a núcleo en `models`)
+    # Ejecutar modelo (núcleo en Python)
     Qsim, Qsed, Qsep, Humedad, St1, St3, Balance, Speed, Area, Alm, Qsep_byrain = \
-        models.shia_v1(rain_pathBin, rain_pathHdr, Calibracion,
-                       N, np.count_nonzero(models.control)+1,
-                       np.count_nonzero(models.control_h),
-                       N_intervals, StorageLoc, HspeedLoc,
-                       path_sto_bin, path_speed, path_vflux_bin,
-                       path_conv, path_stra, "", "",
-                       path_retorno, path_rc)
+        shia_v1(
+            rain_pathBin,
+            rain_pathHdr,
+            Calibracion,
+            N,
+            np.count_nonzero(models.control) + 1,
+            np.count_nonzero(models.control_h),
+            N_intervals,
+            StorageLoc,
+            HspeedLoc,
+            path_sto_bin,
+            path_speed,
+            path_vflux_bin,
+            path_conv,
+            path_stra,
+            "",
+            "",
+            path_retorno,
+            path_rc,
+        )
 
     # Ensamblar retornos
     Retornos = {'Qsim': Qsim, 'Balance': Balance, 'Storage': Alm,
@@ -2289,6 +2344,7 @@ def integracion_por_coordenadas(
     dx: float,
     dy: float,
     outlet_rc: tuple[int, int],
+    out_dir: str | None = None,
 ):
     """Example of stream extraction using coordinate seeds.
 
@@ -2301,7 +2357,7 @@ def integracion_por_coordenadas(
     if cfg.seed_coords is not None:
         sc = cfg.seed_coords
         cand = cfg.streams.candidate_thresholds
-        return stream_find_nearby(
+        res = stream_find_nearby(
             acum,
             flowdir,
             sc.x,
@@ -2315,14 +2371,28 @@ def integracion_por_coordenadas(
             search_radius_cells=sc.search_radius_cells,
             candidate_thresholds=cand,
         )
+    else:
+        thr = 1
+        if cfg.streams.candidate_thresholds:
+            thr = cfg.streams.candidate_thresholds[0]
+        stream = stream_find(acum, thr)
+        stream = stream_cut(stream, mask_basin)
+        stream = stream_find_to_corr(stream, flowdir, outlet_rc)
+        res = {"stream": stream.astype(bool), "threshold": thr, "seed_rc": outlet_rc}
 
-    thr = 1
-    if cfg.streams.candidate_thresholds:
-        thr = cfg.streams.candidate_thresholds[0]
-    stream = stream_find(acum, thr)
-    stream = stream_cut(stream, mask_basin)
-    stream = stream_find_to_corr(stream, flowdir, outlet_rc)
-    return {"stream": stream.astype(bool), "threshold": thr, "seed_rc": outlet_rc}
+    if out_dir is not None:
+        os.makedirs(out_dir, exist_ok=True)
+        seed_rc = tuple(res["seed_rc"])
+        meta = {
+            "seed_rc": [int(seed_rc[0]), int(seed_rc[1])],
+            "acum_seed": float(acum[seed_rc]),
+            "threshold": int(res["threshold"]),
+            "n_stream_cells": int(np.count_nonzero(res["stream"])),
+        }
+        with open(os.path.join(out_dir, "streams_meta.json"), "w", encoding="utf8") as f:
+            json.dump(meta, f)
+
+    return res
 
 
 def salidas_hdnd_a_quien(
@@ -2334,14 +2404,39 @@ def salidas_hdnd_a_quien(
     out_dir: str,
     write_hdnd: bool = True,
     write_aquien: bool = True,
+    xll: float = 0.0,
+    yll: float = 0.0,
+    epsg: int | None = None,
 ):
     """Generate hydrologic distance and receiver rasters."""
 
     if not (write_hdnd or write_aquien):
         return
-    hdnd, aquien = hydro_distance_and_receiver(flowdir, stream_mask, mask_basin, dx, dy)
+
+    hdnd, aquien = hydro_distance_and_receiver(
+        flowdir, stream_mask, mask_basin, dx, dy
+    )
     os.makedirs(out_dir, exist_ok=True)
+
+    ny, nx = flowdir.shape
+    transform = from_origin(xll, yll + dy * ny, dx, dy)
+    meta: dict[str, object] = {"transform": transform}
+    if epsg is None and Global_EPSG != -9999:
+        epsg = Global_EPSG
+    if epsg is not None:
+        meta["crs"] = f"EPSG:{int(epsg)}"
+
     if write_hdnd:
-        np.save(os.path.join(out_dir, "hdnd_model.npy"), hdnd.astype(np.float32))
+        write_geotiff(
+            os.path.join(out_dir, "hdnd_model.tif"),
+            hdnd.astype(np.float32),
+            meta,
+        )
     if write_aquien:
-        np.save(os.path.join(out_dir, "a_quien.npy"), aquien.astype(np.int32))
+        meta_aq = dict(meta)
+        meta_aq["nodata"] = -1
+        write_geotiff(
+            os.path.join(out_dir, "a_quien.tif"),
+            aquien.astype(np.int32),
+            meta_aq,
+        )

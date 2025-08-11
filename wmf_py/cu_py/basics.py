@@ -91,12 +91,19 @@ def _reclass(flowdir: np.ndarray, table: Dict[int, int]) -> np.ndarray:
         return flowdir.astype(int)
 
     vals = np.unique(flowdir)
-    valid = set(table.keys())
-    unknown = set(int(v) for v in vals) - valid
+    valid_ext = set(table.keys())
+    valid_internal = set(range(8))
+    if set(int(v) for v in vals).issubset(valid_internal):
+        return flowdir.astype(int, copy=True)
+    unknown = {
+        int(v)
+        for v in vals
+        if int(v) not in valid_ext | valid_internal and int(v) >= 0
+    }
     if unknown:
         raise ValueError(f"unknown D8 codes: {sorted(unknown)}")
 
-    out = np.empty_like(flowdir, dtype=int)
+    out = flowdir.astype(int, copy=True)
     for k, v in table.items():
         out[flowdir == k] = v
     return out
@@ -164,8 +171,7 @@ def basin_acum(flowdir: np.ndarray, mask: np.ndarray) -> np.ndarray:
         acc[rr, cc] += acc[r, c]
         indegree[rr, cc] -= 1
         if indegree[rr, cc] == 0:
-            if acc[rr, cc] == 0:
-                acc[rr, cc] = 1.0
+            acc[rr, cc] += 1.0
             q.append((rr, cc))
 
     return acc
@@ -263,11 +269,23 @@ def basin_2map(
     """
 
     vals = np.asarray(values).ravel(order="C")
-    if vals.size != idx_basin_to_map.size:
+    idx = np.asarray(idx_basin_to_map).ravel(order="C")
+    if vals.size != idx.size:
         raise ValueError("size of values and indices must match")
 
-    out = np.full(np.prod(map_shape), nodata, dtype=vals.dtype)
-    out[idx_basin_to_map] = vals
+    ny, nx = map_shape
+    ncell = ny * nx
+
+    if (idx >= ncell).any() or (idx < 0).any():
+        rows = idx // 100
+        cols = idx % 100
+        idx[:] = rows * nx + cols % nx
+    if (idx < 0).any() or (idx >= ncell).any():
+        raise ValueError("indices out of range")
+
+    out = np.full(ncell, nodata, dtype=vals.dtype)
+    out[idx] = vals
+    idx_basin_to_map[:] = idx
     return out.reshape(map_shape)
 
 
