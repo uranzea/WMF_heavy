@@ -55,14 +55,15 @@ def load_config(path: str) -> Config:
         )
 
     streams = data.get("streams", {})
-    streams_cfg = StreamsConfig(
-        candidate_thresholds=streams.get("candidate_thresholds")
-    )
+    cand = streams.get("candidate_thresholds")
+    if cand is not None:
+        cand = [int(v) for v in cand]
+    streams_cfg = StreamsConfig(candidate_thresholds=cand)
 
     outputs = data.get("outputs", {})
     outputs_cfg = OutputsConfig(
-        hdnd=bool(outputs.get("hdnd", False)),
-        aquien=bool(outputs.get("aquien", False)),
+        hdnd=bool(outputs.get("hdnd", True)),
+        aquien=bool(outputs.get("aquien", True)),
     )
 
     return Config(seed_coords=seed_cfg, streams=streams_cfg, outputs=outputs_cfg)

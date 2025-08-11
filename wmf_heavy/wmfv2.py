@@ -19,6 +19,7 @@ Este bloque prepara el entorno de trabajo para el módulo WMF:
 import os
 import random
 import datetime as datetime
+import json
 
 import numpy as np
 import pandas as pd
@@ -53,6 +54,8 @@ if USE_PY:
     )
     from wmf_py.cu_py.metrics import hydro_distance_and_receiver
     from wmf_py.utils.config import load_config
+    from wmf_py.utils.io import write_geotiff
+    from rasterio.transform import from_origin
     from wmf_py.models_py.core import ModelParams, ModelState, shia_v1
     # Intentar importar módulos legacy para funcionalidades aún no
     # portadas. Si no están disponibles simplemente se omiten.
@@ -2287,6 +2290,7 @@ def integracion_por_coordenadas(
     dx: float,
     dy: float,
     outlet_rc: tuple[int, int],
+    out_dir: str | None = None,
 ):
     """Example of stream extraction using coordinate seeds.
 
@@ -2299,7 +2303,7 @@ def integracion_por_coordenadas(
     if cfg.seed_coords is not None:
         sc = cfg.seed_coords
         cand = cfg.streams.candidate_thresholds
-        return stream_find_nearby(
+        res = stream_find_nearby(
             acum,
             flowdir,
             sc.x,
@@ -2313,14 +2317,28 @@ def integracion_por_coordenadas(
             search_radius_cells=sc.search_radius_cells,
             candidate_thresholds=cand,
         )
+    else:
+        thr = 1
+        if cfg.streams.candidate_thresholds:
+            thr = cfg.streams.candidate_thresholds[0]
+        stream = stream_find(acum, thr)
+        stream = stream_cut(stream, mask_basin)
+        stream = stream_find_to_corr(stream, flowdir, outlet_rc)
+        res = {"stream": stream.astype(bool), "threshold": thr, "seed_rc": outlet_rc}
 
-    thr = 1
-    if cfg.streams.candidate_thresholds:
-        thr = cfg.streams.candidate_thresholds[0]
-    stream = stream_find(acum, thr)
-    stream = stream_cut(stream, mask_basin)
-    stream = stream_find_to_corr(stream, flowdir, outlet_rc)
-    return {"stream": stream.astype(bool), "threshold": thr, "seed_rc": outlet_rc}
+    if out_dir is not None:
+        os.makedirs(out_dir, exist_ok=True)
+        seed_rc = tuple(res["seed_rc"])
+        meta = {
+            "seed_rc": [int(seed_rc[0]), int(seed_rc[1])],
+            "acum_seed": float(acum[seed_rc]),
+            "threshold": int(res["threshold"]),
+            "n_stream_cells": int(np.count_nonzero(res["stream"])),
+        }
+        with open(os.path.join(out_dir, "streams_meta.json"), "w", encoding="utf8") as f:
+            json.dump(meta, f)
+
+    return res
 
 
 def salidas_hdnd_a_quien(
@@ -2332,14 +2350,39 @@ def salidas_hdnd_a_quien(
     out_dir: str,
     write_hdnd: bool = True,
     write_aquien: bool = True,
+    xll: float = 0.0,
+    yll: float = 0.0,
+    epsg: int | None = None,
 ):
     """Generate hydrologic distance and receiver rasters."""
 
     if not (write_hdnd or write_aquien):
         return
-    hdnd, aquien = hydro_distance_and_receiver(flowdir, stream_mask, mask_basin, dx, dy)
+
+    hdnd, aquien = hydro_distance_and_receiver(
+        flowdir, stream_mask, mask_basin, dx, dy
+    )
     os.makedirs(out_dir, exist_ok=True)
+
+    ny, nx = flowdir.shape
+    transform = from_origin(xll, yll + dy * ny, dx, dy)
+    meta: dict[str, object] = {"transform": transform}
+    if epsg is None and Global_EPSG != -9999:
+        epsg = Global_EPSG
+    if epsg is not None:
+        meta["crs"] = f"EPSG:{int(epsg)}"
+
     if write_hdnd:
-        np.save(os.path.join(out_dir, "hdnd_model.npy"), hdnd.astype(np.float32))
+        write_geotiff(
+            os.path.join(out_dir, "hdnd_model.tif"),
+            hdnd.astype(np.float32),
+            meta,
+        )
     if write_aquien:
-        np.save(os.path.join(out_dir, "a_quien.npy"), aquien.astype(np.int32))
+        meta_aq = dict(meta)
+        meta_aq["nodata"] = -1
+        write_geotiff(
+            os.path.join(out_dir, "a_quien.tif"),
+            aquien.astype(np.int32),
+            meta_aq,
+        )
